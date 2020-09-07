@@ -22,19 +22,6 @@
 
 // Typedefs
 
-// Buffer for pre-threading
-typedef struct 
-{
-	int *buf;		/* Buffer array */
-	int n;			/* Maximum number of slots */
-	int front;		/* buf[(front+1)%n] is the first tiem */
-	int rear;		/* buf[rear%n] is the last item */
-	int slots;		/* Counts avalible slots */
-	pthread_mutex_t mutex;	/* Protects access to buf */
-	pthread_cond_t not_empty;	
-	pthread_cond_t not_full;
-} sbuf_t;
-
 // Client struct
 typedef struct
 {
@@ -44,17 +31,33 @@ typedef struct
 } client_struct;
 
 
+// Buffer for pre-threading
+typedef struct 
+{
+	// int *buf;		/* Buffer array */
+    client_struct **buf;
+	int n;			/* Maximum number of slots */
+	int front;		/* buf[(front+1)%n] is the first item */
+	int rear;		/* buf[rear%n] is the last item */
+	int slots;		/* Counts avalible slots */
+	pthread_mutex_t mutex;	/* Protects access to buf */
+	pthread_cond_t not_empty;	
+	pthread_cond_t not_full;
+} sbuf_t;
+
+
+
 
 // Function definitions
-static void doit(int connfd);
-static void *thread(void *vargp);
-static void	sbuf_init(sbuf_t *sp, int n);
-static void	sbuf_insert(sbuf_t *sp, int item);
-static int 	sbuf_remove(sbuf_t *sp);
+static void           doit(client_struct *from_client);
+static void*          thread(void *vargp);
+void	          sbuf_init(sbuf_t *sp, int n);
+void	          sbuf_insert(sbuf_t *sp, client_struct *item);
+client_struct* sbuf_remove(sbuf_t *sp);
 
 
 // Globals
-sbuf_t sbuf; // Shared buffer of connected descriptors
+sbuf_t sbuf; // Shared buffer of client_struct pointers
 client_struct *client_list[MAX_CLIENTS] = {0}; // Array to hold all the currently connected clients (NULL initalized)
 pthread_mutex_t client_list_mutex;
 atomic_uint num_clients = 0;
@@ -127,11 +130,13 @@ void client_list_print(void)
  * Effects:
  *   Initializes a bounded buffer for holding connection requests.
  */
-static void 
-sbuf_init(sbuf_t *sp, int n)
+void sbuf_init(sbuf_t *sp, int n)
 {
-	// sp->buf = Calloc(n, sizeof(int));
-    sp->buf = calloc(n, sizeof(int));
+    sp->buf = malloc(n * sizeof(client_struct *));
+    for (int i = 0; i < n; ++i)
+    {
+        (sp->buf)[i] = NULL;
+    }
 	sp->n = n;				/* Buffer holds n items */
 	sp->front = sp->rear = 0;		/* Empty iff front == rear */
 	pthread_mutex_init(&sp->mutex, NULL);	/* Default mutex for locking */
@@ -147,8 +152,7 @@ sbuf_init(sbuf_t *sp, int n)
  * Effects:
  *   Inserts item into the rear of the buffer.
  */
-static void 
-sbuf_insert(sbuf_t *sp, int item)
+void sbuf_insert(sbuf_t *sp, client_struct *item)
 {				
 	pthread_mutex_lock(&sp->mutex);		/* Lock the buffer */
 	while (sp->slots == sp->n) {		/* Wait for available slot */
@@ -168,10 +172,9 @@ sbuf_insert(sbuf_t *sp, int item)
  * Effects:
  *   Removes first item from buffer.
  */
-static int 
-sbuf_remove(sbuf_t *sp)
+client_struct* sbuf_remove(sbuf_t *sp)
 {
-	int item;
+	client_struct *item;
 	pthread_mutex_lock(&sp->mutex);		/* Lock the buffer */
 	while (sp->slots == 0) {		/* Wait for available item */
 		pthread_cond_wait(&sp->not_empty, &sp->mutex);
@@ -302,7 +305,8 @@ int main(int argc, char **argv)
         client_add(client);
 
         // Handle the client by inserting the connfd into the bounded buffer (Done by the main thread)
-        sbuf_insert(&sbuf, connfd);
+        // sbuf_insert(&sbuf, connfd);
+        sbuf_insert(&sbuf, client);
 
 
         // REMEMBER TO FREE UR MEMORY
@@ -326,7 +330,10 @@ void *thread(void *vargp)
     pthread_detach(pthread_self()); // No return values
 	while(1) {
 		    // Remove descriptor from bounded buffer
-		    int connfd = sbuf_remove(&sbuf);
+		    // int connfd = sbuf_remove(&sbuf);
+
+            client_struct *from_client = sbuf_remove(&sbuf);
+            int connfd = from_client->clientfd;
         	// struct sockaddr_in addr;
         	// socklen_t addr_size = sizeof(struct sockaddr_in);
         	// int res = getpeername(connfd, (struct sockaddr *)&addr, &addr_size);
@@ -336,7 +343,8 @@ void *thread(void *vargp)
 	    	// 	continue;
         	// }
 		// Service client and close
-        doit(connfd);
+        // doit(connfd);
+        doit(from_client);
 		close(connfd);
 	}
 }
@@ -350,7 +358,7 @@ void send_msg_self(int connfd, char *msg)
     }
 }
 
-void send_msg_all(char *msg)
+void send_msg_all(char *msg, client_struct *from_client)
 {
     int connfd; // Holds the client fd's for each client;
 
@@ -360,11 +368,25 @@ void send_msg_all(char *msg)
         if (client_list[i] != NULL) // Looking for a non-NULL slots
         {
             connfd = client_list[i]->clientfd;
+
+            // This will need to be changed when we actually have string usernames instead of just using the identifier
+            int username_length = snprintf(NULL, 0, "%d", from_client->identifier);
+            char* username = malloc(username_length + 1);
+            snprintf(username, username_length + 1, "%d", from_client->identifier);
+
+            // Write indicator of which user sent the message
+            if (write(connfd, username, strlen(username)) < 0) 
+            {
+                printf("Write message to all failed\n");
+                exit(EXIT_FAILURE);
+            }
+            // Write the desired message
             if (write(connfd, msg, strlen(msg)) < 0) 
             {
                 printf("Write message to all failed\n");
                 exit(EXIT_FAILURE);
             }
+            free(username);
         }
     }
     pthread_mutex_unlock(&client_list_mutex);
@@ -375,14 +397,16 @@ void send_msg_all(char *msg)
 
 // doit() is for handling a single client
 
-void doit(int connfd)
+// void doit(int connfd)
+void doit(client_struct *from_client)
 {
     int valread;
+    int connfd = from_client->clientfd;
     char buffer[MAX_LINE_LENGTH] = {0}; // Holds a client message
     //char *welcome_message = "[Server] Welcome to the chatroom, client. Please join a chatroom using the command: JOIN {ROOMNAME} {USERNAME}\n"; 
     //send(connfd, welcome_message, strlen(welcome_message) , 0 ); // Send a welcome message to the client
 
-
+    printf("HELLO FROM: %d\n", connfd);
     // Continously read messages from the client
     while ((valread = read(connfd , buffer, MAX_LINE_LENGTH)) > 0)
     {
@@ -391,7 +415,7 @@ void doit(int connfd)
 
         printf("[Client] %s\n", buffer); // Print the client message on the server side
         send_msg_self(connfd, buffer);
-        send_msg_all(buffer);
+        // send_msg_all(buffer, from_client);
 
         // 1. Read the messages from the client continously [x]
         // 2. Print the client's entered message to the client themself []
