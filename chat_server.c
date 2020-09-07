@@ -182,7 +182,6 @@ int main(int argc, char **argv)
 	sbuf_init(&sbuf, SBUFSIZE); // Create bounded buffer for our worker threads
 	for (int i = 0; i < NTHREADS; i++) // Spawn worker threads
     {
-        // Pthread_create(&tid, NULL, thread, NULL);
 		pthread_create(&tid, NULL, thread, NULL);
     }
 
@@ -213,10 +212,7 @@ int main(int argc, char **argv)
             exit(EXIT_FAILURE); 
         }
 
-        // Handle the client
-        // doit(connfd);
-
-        // Insert the connfd into the bounded buffer (Done by the main thread)
+        // Handle the client by inserting the connfd into the bounded buffer (Done by the main thread)
         sbuf_insert(&sbuf, connfd);
     }
 
@@ -233,7 +229,6 @@ int main(int argc, char **argv)
 void *thread(void *vargp)
 {
 	(void) vargp; // Avoid message about unused arguments
-	// Pthread_detach(pthread_self()); // No return values
     pthread_detach(pthread_self()); // No return values
 	while(1) {
 		    // Remove descriptor from bounded buffer
@@ -248,8 +243,6 @@ void *thread(void *vargp)
 	    		continue;
         	}
 		// Service client and close
-		// doit(connfd, &addr);
-        // Close(connfd);
         doit(connfd);
 		close(connfd);
 	}
