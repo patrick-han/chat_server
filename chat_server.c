@@ -3,9 +3,11 @@
 #include <sys/socket.h> 
 #include <stdlib.h> 
 #include <netinet/in.h> 
-#include <string.h> 
+#include <string.h>
+
 #include <signal.h>
 #include <pthread.h>
+#include <stdatomic.h>
 
 
 // Constants
@@ -19,7 +21,10 @@
 
 
 // Typedefs
-typedef struct {
+
+// Buffer for pre-threading
+typedef struct 
+{
 	int *buf;		/* Buffer array */
 	int n;			/* Maximum number of slots */
 	int front;		/* buf[(front+1)%n] is the first tiem */
@@ -30,11 +35,89 @@ typedef struct {
 	pthread_cond_t not_full;
 } sbuf_t;
 
+// Client struct
+typedef struct
+{
+    int clientfd;   // File descriptor for the client's connection
+    int identifier; // Client identifier
+    // TODO: Add attribute which says which chat room the client is a part of
+} client_struct;
+
 
 
 // Function definitions
-void doit(int connfd);
-void *thread(void *vargp);
+static void doit(int connfd);
+static void *thread(void *vargp);
+static void	sbuf_init(sbuf_t *sp, int n);
+static void	sbuf_insert(sbuf_t *sp, int item);
+static int 	sbuf_remove(sbuf_t *sp);
+
+
+// Globals
+sbuf_t sbuf; // Shared buffer of connected descriptors
+client_struct *client_list[MAX_CLIENTS] = {0}; // Array to hold all the currently connected clients (NULL initalized)
+pthread_mutex_t client_list_mutex;
+atomic_uint num_clients = 0;
+int next_identifier = 1; // Number we use to get a unique identifier for an incoming new client
+
+
+/*
+ * Requires:
+ *   Client struct pointer.
+ *
+ * Effects:
+ *   Adds a client the the client_list.
+ */
+void client_add(client_struct *client)
+{
+    pthread_mutex_lock(&client_list_mutex);
+    for (int i = 0; i < MAX_CLIENTS; ++i)
+    {
+        if (client_list[i] == NULL) // Looking for a NULL slot
+        {
+            client_list[i] = client;
+            printf("[Server] Client connected with identifier: %d and fd: %d\n", client->identifier, client->clientfd);
+            num_clients++;
+            break;
+        }
+    }
+    pthread_mutex_unlock(&client_list_mutex);
+}
+
+/*
+ * Requires:
+ *   Client struct pointer.
+ *
+ * Effects:
+ *   Removes a client the the client_list.
+ */
+// void client_remove(client_struct *client)
+// {
+
+// }
+
+
+/*
+ * Requires:
+ *   Client struct pointer.
+ *
+ * Effects:
+ *   Adds a client the the client_list.
+ */
+void client_list_print(void)
+{
+    printf("[Server] Total number of clients: %u\n", num_clients);
+    // pthread_mutex_lock(&client_list_mutex);
+    // for (int i = 0; i < MAX_CLIENTS; ++i)
+    // {
+    //     if (!client_list[i]) // Looking for a non-NULL slot
+    //     {
+    //         // printf("Client found: %u\n", client_list[i]->identifier);
+    //         printf("Client found:\n");
+    //     }
+    // }
+    // pthread_mutex_unlock(&client_list_mutex);
+}
 
 
 /*
@@ -101,7 +184,7 @@ sbuf_remove(sbuf_t *sp)
 }
 
 
-sbuf_t sbuf; // Shared buffer of connected descriptors
+
 
 int main(int argc, char **argv)
 {
@@ -127,7 +210,8 @@ int main(int argc, char **argv)
     // Ignore SIGPIPE
 	signal(SIGPIPE, SIG_IGN);
 
-
+    // Initalize mutex for adding clients to the client_list
+    pthread_mutex_init(&client_list_mutex, NULL);
 
 
 
@@ -196,14 +280,6 @@ int main(int argc, char **argv)
     /* Handle clients */
     while(1)
     {
-        // Accept a connection
-        // if ((connfd = accept(serverfd, (struct sockaddr *)&server_address, (socklen_t*)&addrlen))<0) 
-        // { 
-        //     printf("accept error\n");
-        //     exit(EXIT_FAILURE); 
-        // }
-
-
         // Create a connected descriptor that can be used to communicate with the client
         socklen_t client_addr_len = sizeof(client_address);
         if ((connfd = accept(serverfd, (struct sockaddr *)&client_address, &client_addr_len)) < 0) 
@@ -212,19 +288,37 @@ int main(int argc, char **argv)
             exit(EXIT_FAILURE); 
         }
 
+        if (num_clients == MAX_CLIENTS) // Reject connection if the client list is full
+        {
+            printf("[Server] Max clients reached, connection rejected\n");
+            close(connfd);
+            continue;
+        }
+
+        // Initialize a client struct + attributes, and add it to the list of clients
+        client_struct *client = malloc(sizeof(client_struct));
+        client->clientfd = connfd;
+        client->identifier = next_identifier++;
+        client_add(client);
+
         // Handle the client by inserting the connfd into the bounded buffer (Done by the main thread)
         sbuf_insert(&sbuf, connfd);
+
+
+        // REMEMBER TO FREE UR MEMORY
     }
 
     return(0);
 }
 
 /* 
+ * Thread routine
+ * 
  * Requires:
  *   Nothing
  *
  * Effects:
- *   Services client request with worker thread
+ *   Services client request with worker thread.
  */
 void *thread(void *vargp)
 {
@@ -233,15 +327,14 @@ void *thread(void *vargp)
 	while(1) {
 		    // Remove descriptor from bounded buffer
 		    int connfd = sbuf_remove(&sbuf);
-        	struct sockaddr_in addr;
-        	socklen_t addr_size = sizeof(struct sockaddr_in);
-        	int res = getpeername(connfd, (struct sockaddr *)&addr, &addr_size);
-        	if (res < 0) {
-           		// Error
-            	// printf("Error with getting peer name from file descriptor %d, %s\n", res, strerror(errno));
-                printf("Error with getting peer name from file descriptor %d\n", res);
-	    		continue;
-        	}
+        	// struct sockaddr_in addr;
+        	// socklen_t addr_size = sizeof(struct sockaddr_in);
+        	// int res = getpeername(connfd, (struct sockaddr *)&addr, &addr_size);
+        	// if (res < 0) {
+           	// 	// Error
+            //     printf("Error with getting peer name from file descriptor %d\n", res);
+	    	// 	continue;
+        	// }
 		// Service client and close
         doit(connfd);
 		close(connfd);
@@ -249,6 +342,33 @@ void *thread(void *vargp)
 }
 
 
+void send_msg_self(int connfd, char *msg)
+{
+    if (write(connfd, msg, strlen(msg)) < 0) {
+        printf("Write message to self failed\n");
+        exit(EXIT_FAILURE);
+    }
+}
+
+void send_msg_all(char *msg)
+{
+    int connfd; // Holds the client fd's for each client;
+
+    pthread_mutex_lock(&client_list_mutex);
+    for (int i = 0; i < MAX_CLIENTS; ++i)
+    {
+        if (client_list[i] != NULL) // Looking for a non-NULL slots
+        {
+            connfd = client_list[i]->clientfd;
+            if (write(connfd, msg, strlen(msg)) < 0) 
+            {
+                printf("Write message to all failed\n");
+                exit(EXIT_FAILURE);
+            }
+        }
+    }
+    pthread_mutex_unlock(&client_list_mutex);
+}
 
 
 
@@ -258,16 +378,25 @@ void *thread(void *vargp)
 void doit(int connfd)
 {
     int valread;
-    char buffer[MAX_LINE_LENGTH] = {0}; 
-    char *hello = "[Server] Welcome to the chatroom, client. Please join a chatroom using the command: JOIN {ROOMNAME} {USERNAME}\n"; 
-    send(connfd , hello , strlen(hello) , 0 ); // Send a welcome message to the client
+    char buffer[MAX_LINE_LENGTH] = {0}; // Holds a client message
+    //char *welcome_message = "[Server] Welcome to the chatroom, client. Please join a chatroom using the command: JOIN {ROOMNAME} {USERNAME}\n"; 
+    //send(connfd, welcome_message, strlen(welcome_message) , 0 ); // Send a welcome message to the client
 
 
     // Continously read messages from the client
     while ((valread = read(connfd , buffer, MAX_LINE_LENGTH)) > 0)
     {
         // printf("[Server] valread value: %d\n", valread);
+
+
         printf("[Client] %s\n", buffer); // Print the client message on the server side
+        send_msg_self(connfd, buffer);
+        send_msg_all(buffer);
+
+        // 1. Read the messages from the client continously [x]
+        // 2. Print the client's entered message to the client themself []
+        // 3. Send the client's message to the server []
+        // 4. Print the client's entered message to the other clients (who are in the same chat room) [ ]
     }
     
 }
