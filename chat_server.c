@@ -100,10 +100,22 @@ void client_add(client_struct *client)
  * Effects:
  *   Removes a client the the client_list.
  */
-// void client_remove(client_struct *client)
-// {
-
-// }
+void client_remove(client_struct *client)
+{
+    pthread_mutex_lock(&client_list_mutex);
+    for (int i = 0; i < MAX_CLIENTS; ++i)
+    {
+        if (client_list[i] != NULL)
+        {
+            if(client_list[i]->identifier == client->identifier)
+            {
+                client_list[i] = NULL;
+            }
+        }
+        
+    }
+    pthread_mutex_unlock(&client_list_mutex);
+}
 
 
 /*
@@ -319,25 +331,27 @@ void *thread(void *vargp)
 {
 	(void) vargp; // Avoid message about unused arguments
     pthread_detach(pthread_self()); // No return values
-	while(1) {
-		    // Remove descriptor from bounded buffer
-		    // int connfd = sbuf_remove(&sbuf);
+	while(1) 
+    {
+        // Remove descriptor from bounded buffer
+        // int connfd = sbuf_remove(&sbuf);
 
-            client_struct *from_client = sbuf_remove(&sbuf);
-            int connfd = from_client->clientfd;
-        	// struct sockaddr_in addr;
-        	// socklen_t addr_size = sizeof(struct sockaddr_in);
-        	// int res = getpeername(connfd, (struct sockaddr *)&addr, &addr_size);
-        	// if (res < 0) {
-           	// 	// Error
-            //     printf("Error with getting peer name from file descriptor %d\n", res);
-	    	// 	continue;
-        	// }
+        client_struct *from_client = sbuf_remove(&sbuf);
+        int connfd = from_client->clientfd;
+        // struct sockaddr_in addr;
+        // socklen_t addr_size = sizeof(struct sockaddr_in);
+        // int res = getpeername(connfd, (struct sockaddr *)&addr, &addr_size);
+        // if (res < 0) {
+        // 	// Error
+        //     printf("Error with getting peer name from file descriptor %d\n", res);
+        // 	continue;
+        // }
 		// Service client and close
         // doit(connfd);
         doit(from_client);
         char *leave_msg = concat(from_client->username, " has left");
         send_msg_all(leave_msg, from_client);
+        client_remove(from_client);
 		close(connfd);
 	}
 }
@@ -371,13 +385,6 @@ void send_msg_all(char *msg, client_struct *from_client)
         {
             connfd = client_list[i]->clientfd;
 
-            // // Write indicator of which user sent the message {USERNAME}: 
-            // if (write(connfd, prompt, strlen(prompt)) < 0) 
-            // {
-            //     printf("Write message to all failed (prompt)\n");
-            //     exit(EXIT_FAILURE);
-            // }
-            // Write the message sent from the user from_client
             if (write(connfd, msg, strlen(msg)) < 0) 
             {
                 printf("Write message to all failed (msg)\n");
@@ -417,11 +424,12 @@ void doit(client_struct *from_client)
     //char *welcome_message = "[Server] Welcome to the chatroom, client. Please join a chatroom using the command: JOIN {ROOMNAME} {USERNAME}\n"; 
     //send(connfd, welcome_message, strlen(welcome_message) , 0 ); // Send a welcome message to the client
 
-    printf("Client \"%d\" joined the server\n", from_id);
+    printf("[Server] Client \"%d\" joined the server\n", from_id);
     // Continously read messages from the client
     while ((valread = read(from_connfd, msg_buffer, MAX_LINE_LENGTH)) > 0)
     {
-        strip_CR_NL(msg_buffer);
+        strip_CR_NL(msg_buffer); // Strip return carriage and new line
+        
         if (!from_joined)
         {
             // strcpy the message buffer since strtok() modifies the msg_buffer
@@ -430,6 +438,12 @@ void doit(client_struct *from_client)
             // Delimit the input string use strtok() to look for JOIN {ROOMNAME} {USERNAME}<NL>
             int i = 1;
             char *p = strtok(msg_buffer_cpy, " ");
+
+            if (p == NULL) // Ignore blank input, or else a segfault will occur in the strcmp() below
+            {
+                continue;
+            }
+
             if (!strcmp(p, "JOIN")) // We only care to parse the line if its a JOIN command at this point
             {
                 while (p) {
@@ -454,7 +468,7 @@ void doit(client_struct *from_client)
                 else
                 {
                     //TODO: validate roomname and username are not spaces or something wacky...
-                    printf("Client identified by: \"%d\" and named: %s has joined the room called: %s\n", from_id, from_client->username, from_client->roomname);
+                    printf("[Server] Client identified by: \"%d\" and named: \"%s\" has joined the room called: \"%s\"\n", from_id, from_client->username, from_client->roomname);
                     from_joined = 1;
                 }
                 
