@@ -50,12 +50,24 @@ typedef struct
 
 
 // Function definitions
-static void           doit(client_struct *from_client);
-static void*          thread(void *vargp);
-void	          sbuf_init(sbuf_t *sp, int n);
-void	          sbuf_insert(sbuf_t *sp, client_struct *item);
+void client_add(client_struct *client);
+void client_remove(client_struct *client);
+
+void sbuf_init(sbuf_t *sp, int n);
+void sbuf_insert(sbuf_t *sp, client_struct *item);
 client_struct* sbuf_remove(sbuf_t *sp);
+
+char* concat(const char *s1, const char *s2);
+void strip_CR_NL(char *str);
+
+static void* thread(void *vargp);
+
+void send_msg_to( char *msg, int connfd);
 void send_msg_all(char *msg, client_struct *from_client);
+
+static void doit(client_struct *from_client);
+
+
 
 
 // Globals
@@ -192,6 +204,24 @@ char* concat(const char *s1, const char *s2)
     strcpy(result, s1);
     strcat(result, s2);
     return result;
+}
+
+
+/* 
+ * Requires:
+ *   Input string.
+ *
+ * Effects:
+ *   Strips newlines and return carriages from an input string by replacing them with nullbytes.
+ */
+void strip_CR_NL(char *str)
+{
+    while (*str != '\0') {
+        if (*str == '\r' || *str == '\n') {
+            *str = '\0';
+        }
+        str++;
+    }
 }
 
 
@@ -399,24 +429,6 @@ void send_msg_all(char *msg, client_struct *from_client)
         }
     }
     pthread_mutex_unlock(&client_list_mutex);
-}
-
-
-/* 
- * Requires:
- *   Input string.
- *
- * Effects:
- *   Strips newlines and return carriages from an input string by replacing them with nullbytes.
- */
-void strip_CR_NL(char *str)
-{
-    while (*str != '\0') {
-        if (*str == '\r' || *str == '\n') {
-            *str = '\0';
-        }
-        str++;
-    }
 }
 
 
