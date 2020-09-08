@@ -31,7 +31,7 @@ typedef struct
     int identifier; // Client identifier
     int joined;     // Boolean that says whether a client has joined a room 1 if yes 0 if no
     char roomname[MAX_ROOMNAME_LENGTH]; // The chat room a client is part of
-    // TODO: Add attribute which says which chat room the client is a part of
+    char username[MAX_NAME_LENGTH]; // String name of the user
 } client_struct;
 
 
@@ -353,35 +353,51 @@ void send_msg_all(char *msg, char *prompt, client_struct *from_client)
 {
     int connfd; // Holds the client fd's for each client iterated throug in the client_list;
     int from_id = from_client->identifier;
+    char *from_roomname = from_client->roomname;
+    char *end_seq = "\r\n";
 
     pthread_mutex_lock(&client_list_mutex);
     for (int i = 0; i < MAX_CLIENTS; ++i)
     {
-        if ((client_list[i] != NULL) && (client_list[i]->identifier != from_id)) // Looking for a non-NULL slots, don't send to the client that sent it, 
+        if ((client_list[i] != NULL) 
+            && (client_list[i]->identifier != from_id)
+            && (!strcmp(client_list[i]->roomname, from_roomname))) // Looking for a non-NULL slots, don't send to the client that sent it, and only send to clients from the same room
         {
             connfd = client_list[i]->clientfd;
 
             // Write indicator of which user sent the message {USERNAME}: 
             if (write(connfd, prompt, strlen(prompt)) < 0) 
             {
-                printf("Write message to all failed\n");
+                printf("Write message to all failed (prompt)\n");
                 exit(EXIT_FAILURE);
             }
             // Write the message sent from the user from_client
             if (write(connfd, msg, strlen(msg)) < 0) 
             {
-                printf("Write message to all failed\n");
+                printf("Write message to all failed (msg)\n");
                 exit(EXIT_FAILURE);
             }
-            // free(username);
-            // free(prompt);
+            // Write \r\n
+            if (write(connfd, end_seq, strlen(end_seq)) < 0) 
+            {
+                printf("Write message to all failed (end_seq)\n");
+                exit(EXIT_FAILURE);
+            }
         }
     }
     pthread_mutex_unlock(&client_list_mutex);
 }
 
 
-
+void strip_CR_NL(char *str)
+{
+    while (*str != '\0') {
+        if (*str == '\r' || *str == '\n') {
+            *str = '\0';
+        }
+        str++;
+    }
+}
 
 // doit() is for handling a single client
 void doit(client_struct *from_client)
@@ -399,6 +415,7 @@ void doit(client_struct *from_client)
     // Continously read messages from the client
     while ((valread = read(from_connfd, msg_buffer, MAX_LINE_LENGTH)) > 0)
     {
+        strip_CR_NL(msg_buffer);
         if (!from_joined)
         {
             // strcpy the message buffer since strtok() modifies the msg_buffer
@@ -410,7 +427,7 @@ void doit(client_struct *from_client)
             if (!strcmp(p, "JOIN")) // We only care to parse the line if its a JOIN command at this point
             {
                 while (p) {
-                    printf("%i. token = %s\n", i, p);
+                    // printf("%i. token = %s\n", i, p);
                     p = strtok(NULL, " ");
                     i = i + 1;
 
@@ -420,7 +437,7 @@ void doit(client_struct *from_client)
                     }
                     else if (i == 3) // USERNAME
                     {
-
+                        strcpy(from_client->username, p);
                     }
                 }
                 // If after parsing the JOIN command, there are not 3 tokens (including JOIN) something has gone wrong..
@@ -431,7 +448,7 @@ void doit(client_struct *from_client)
                 else
                 {
                     //TODO: validate roomname and username are not spaces or something wacky...
-                    printf("Client identified by: %d has joined the room %s\n", from_id, from_client->roomname);
+                    printf("Client identified by: \"%d\" and named: %s has joined the room called: %s\n", from_id, from_client->username, from_client->roomname);
                     from_joined = 1;
                 }
                 
@@ -444,16 +461,17 @@ void doit(client_struct *from_client)
 
             // 1. Construct the USERNAME: prompt
             // This will need to be changed when we actually have string usernames instead of just using the identifier
-            int username_length = snprintf(NULL, 0, "%d", from_id);
-            char* username = malloc(username_length + 1);
-            snprintf(username, username_length + 1, "%d", from_id);
+            // int username_length = snprintf(NULL, 0, "%d", from_id);
+            // char* username = malloc(username_length + 1);
+            // snprintf(username, username_length + 1, "%d", from_id);
+            char* username = from_client->username;
             char* prompt = concat(username, ": ");
 
             // Send prompted message back to self and to all other clients in the same chat room
             // send_msg_to(msg_buffer, from_connfd);
             send_msg_all(msg_buffer, prompt, from_client);
 
-            free(username);
+            // free(username);
             free(prompt);
         }
         memset(msg_buffer, 0, sizeof(msg_buffer)); // Clear msg_buffer so previous messages don't leak into the next
