@@ -493,6 +493,8 @@ void doit(client_struct *from_client)
 
             // Send prompted message back to self and to all other clients in the same chat room
             send_msg_all(complete_msg, from_client);
+            send_msg_to(complete_msg, from_client->clientfd);
+            send_msg_to("\r\n", from_client->clientfd);
 
             free(prompt);
             free(complete_msg);
