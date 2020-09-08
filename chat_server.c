@@ -465,6 +465,12 @@ void doit(client_struct *from_client)
                 {
                     //TODO: validate roomname and username are not spaces or something wacky...
                     printf("[Server] Client identified by: \"%d\" and named: \"%s\" has joined the room called: \"%s\"\n", from_id, from_client->username, from_client->roomname);
+                    char* joined_message = concat(from_client->username, " has joined");
+                    send_msg_all(joined_message, from_client);
+                    send_msg_to(joined_message, from_client->clientfd);
+                    send_msg_to("\r\n", from_client->clientfd);
+
+                    free(joined_message);
                     from_joined = 1;
                 }
                 
