@@ -59,6 +59,8 @@ void	          sbuf_init(sbuf_t *sp, int n);
 void	          sbuf_insert(sbuf_t *sp, client_struct *item);
 client_struct* sbuf_remove(sbuf_t *sp);
 
+void send_msg_all(char *msg, client_struct *from_client);
+
 
 // Globals
 sbuf_t sbuf; // Shared buffer of client_struct pointers
@@ -168,6 +170,14 @@ client_struct* sbuf_remove(sbuf_t *sp)
 }
 
 
+char* concat(const char *s1, const char *s2)
+{
+    char *result = malloc(strlen(s1) + strlen(s2) + 1); // +1 for the null-terminator
+    // in real code you would check for errors in malloc here
+    strcpy(result, s1);
+    strcat(result, s2);
+    return result;
+}
 
 
 int main(int argc, char **argv)
@@ -326,6 +336,8 @@ void *thread(void *vargp)
 		// Service client and close
         // doit(connfd);
         doit(from_client);
+        char *leave_msg = concat(from_client->username, " has left");
+        send_msg_all(leave_msg, from_client);
 		close(connfd);
 	}
 }
@@ -339,17 +351,11 @@ void send_msg_to( char *msg, int connfd)
     }
 }
 
-char* concat(const char *s1, const char *s2)
-{
-    char *result = malloc(strlen(s1) + strlen(s2) + 1); // +1 for the null-terminator
-    // in real code you would check for errors in malloc here
-    strcpy(result, s1);
-    strcat(result, s2);
-    return result;
-}
 
 
-void send_msg_all(char *msg, char *prompt, client_struct *from_client)
+
+// void send_msg_all(char *msg, char *prompt, client_struct *from_client)
+void send_msg_all(char *msg, client_struct *from_client)
 {
     int connfd; // Holds the client fd's for each client iterated throug in the client_list;
     int from_id = from_client->identifier;
@@ -365,12 +371,12 @@ void send_msg_all(char *msg, char *prompt, client_struct *from_client)
         {
             connfd = client_list[i]->clientfd;
 
-            // Write indicator of which user sent the message {USERNAME}: 
-            if (write(connfd, prompt, strlen(prompt)) < 0) 
-            {
-                printf("Write message to all failed (prompt)\n");
-                exit(EXIT_FAILURE);
-            }
+            // // Write indicator of which user sent the message {USERNAME}: 
+            // if (write(connfd, prompt, strlen(prompt)) < 0) 
+            // {
+            //     printf("Write message to all failed (prompt)\n");
+            //     exit(EXIT_FAILURE);
+            // }
             // Write the message sent from the user from_client
             if (write(connfd, msg, strlen(msg)) < 0) 
             {
@@ -456,7 +462,7 @@ void doit(client_struct *from_client)
         }
         else // Once the client has joined a chatroom they will be able to send messages
         {
-            printf("[Server] In room: \"%s\", client \"%d\" said: %s\n", from_client->roomname, from_id, msg_buffer); // Print the client message on the server side
+            printf("[Server] In room: \"%s\", client \"%d\" said: \"%s\"\n", from_client->roomname, from_id, msg_buffer); // Print the client message on the server side
 
 
             // 1. Construct the USERNAME: prompt
@@ -466,13 +472,15 @@ void doit(client_struct *from_client)
             // snprintf(username, username_length + 1, "%d", from_id);
             char* username = from_client->username;
             char* prompt = concat(username, ": ");
+            char* complete_msg = concat(prompt, msg_buffer);
 
             // Send prompted message back to self and to all other clients in the same chat room
-            // send_msg_to(msg_buffer, from_connfd);
-            send_msg_all(msg_buffer, prompt, from_client);
+            // send_msg_all(msg_buffer, prompt, from_client);
+            send_msg_all(complete_msg, from_client);
 
             // free(username);
             free(prompt);
+            free(complete_msg);
         }
         memset(msg_buffer, 0, sizeof(msg_buffer)); // Clear msg_buffer so previous messages don't leak into the next
     }
