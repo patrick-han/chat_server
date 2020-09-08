@@ -38,7 +38,6 @@ typedef struct
 // Buffer for pre-threading
 typedef struct 
 {
-	// int *buf;		/* Buffer array */
     client_struct **buf;
 	int n;			/* Maximum number of slots */
 	int front;		/* buf[(front+1)%n] is the first item */
@@ -50,15 +49,12 @@ typedef struct
 } sbuf_t;
 
 
-
-
 // Function definitions
 static void           doit(client_struct *from_client);
 static void*          thread(void *vargp);
 void	          sbuf_init(sbuf_t *sp, int n);
 void	          sbuf_insert(sbuf_t *sp, client_struct *item);
 client_struct* sbuf_remove(sbuf_t *sp);
-
 void send_msg_all(char *msg, client_struct *from_client);
 
 
@@ -182,7 +178,13 @@ client_struct* sbuf_remove(sbuf_t *sp)
 	return item;
 }
 
-
+/* 
+ * Requires:
+ *   2 strings.
+ *
+ * Effects:
+ *   Concatenates two strings and returns the result.
+ */
 char* concat(const char *s1, const char *s2)
 {
     char *result = malloc(strlen(s1) + strlen(s2) + 1); // +1 for the null-terminator
@@ -193,6 +195,13 @@ char* concat(const char *s1, const char *s2)
 }
 
 
+/* 
+ * Requires:
+ *   Port number CLI argument.
+ *
+ * Effects:
+ *   Starts the chat server and serves clients.
+ */
 int main(int argc, char **argv)
 {
     // Process argument
@@ -259,13 +268,6 @@ int main(int argc, char **argv)
         printf("listen error\n");
         exit(EXIT_FAILURE);
     }
-
-
-
-
-
-
-
      
     /* Pre-threading setup */
     pthread_t tid;
@@ -275,9 +277,6 @@ int main(int argc, char **argv)
     {
 		pthread_create(&tid, NULL, thread, NULL);
     }
-
-
-
 
 
     /* Client settings */
@@ -334,14 +333,7 @@ void *thread(void *vargp)
         // Remove next-to-be-serviced client from bounded buffer
         client_struct *from_client = sbuf_remove(&sbuf);
         int connfd = from_client->clientfd;
-        // struct sockaddr_in addr;
-        // socklen_t addr_size = sizeof(struct sockaddr_in);
-        // int res = getpeername(connfd, (struct sockaddr *)&addr, &addr_size);
-        // if (res < 0) {
-        // 	// Error
-        //     printf("Error with getting peer name from file descriptor %d\n", res);
-        // 	continue;
-        // }
+
 		// Service client
         doit(from_client);
         char *leave_msg = concat(from_client->username, " has left");
@@ -352,6 +344,13 @@ void *thread(void *vargp)
 }
 
 
+/* 
+ * Requires:
+ *   String message and connection file descriptor.
+ *
+ * Effects:
+ *   Sends a string message to a single client via client's connection file descriptor.
+ */
 void send_msg_to( char *msg, int connfd)
 {
     if (write(connfd, msg, strlen(msg)) < 0) {
@@ -363,7 +362,13 @@ void send_msg_to( char *msg, int connfd)
 
 
 
-// void send_msg_all(char *msg, char *prompt, client_struct *from_client)
+/* 
+ * Requires:
+ *   String message and client_struct of who that message is from.
+ *
+ * Effects:
+ *   Sends a string message to all other clients in the same room as from_client.
+ */
 void send_msg_all(char *msg, client_struct *from_client)
 {
     int connfd; // Holds the client fd's for each client iterated throug in the client_list;
@@ -397,6 +402,13 @@ void send_msg_all(char *msg, client_struct *from_client)
 }
 
 
+/* 
+ * Requires:
+ *   Input string.
+ *
+ * Effects:
+ *   Strips newlines and return carriages from an input string by replacing them with nullbytes.
+ */
 void strip_CR_NL(char *str)
 {
     while (*str != '\0') {
@@ -407,7 +419,14 @@ void strip_CR_NL(char *str)
     }
 }
 
-// doit() is for handling a single client
+
+/* 
+ * Requires:
+ *   client_struct of the client sending a message.
+ *
+ * Effects:
+ *   Services the client's requests.
+ */
 void doit(client_struct *from_client)
 {
     int valread;
@@ -430,6 +449,7 @@ void doit(client_struct *from_client)
             // strcpy the message buffer since strtok() modifies the msg_buffer
             char msg_buffer_cpy[MAX_LINE_LENGTH] = {0};
             strcpy(msg_buffer_cpy, msg_buffer);
+
             // Delimit the input string use strtok() to look for JOIN {ROOMNAME} {USERNAME}<NL>
             int i = 1;
             char *p = strtok(msg_buffer_cpy, " ");
@@ -447,7 +467,6 @@ void doit(client_struct *from_client)
             if (!strcmp(p, "JOIN")) // We only care to parse the line if its a JOIN command at this point
             {
                 while (p) {
-                    // printf("%i. token = %s\n", i, p);
                     p = strtok(NULL, " ");
                     i = i + 1;
 
