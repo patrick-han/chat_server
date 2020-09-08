@@ -311,9 +311,6 @@ int main(int argc, char **argv)
 
         // Handle the client by inserting the connfd into the bounded buffer (Done by the main thread)
         sbuf_insert(&sbuf, client);
-
-
-        // REMEMBER TO FREE UR MEMORY
     }
 
     return(0);
@@ -334,9 +331,7 @@ void *thread(void *vargp)
     pthread_detach(pthread_self()); // No return values
 	while(1) 
     {
-        // Remove descriptor from bounded buffer
-        // int connfd = sbuf_remove(&sbuf);
-
+        // Remove next-to-be-serviced client from bounded buffer
         client_struct *from_client = sbuf_remove(&sbuf);
         int connfd = from_client->clientfd;
         // struct sockaddr_in addr;
@@ -347,8 +342,7 @@ void *thread(void *vargp)
         //     printf("Error with getting peer name from file descriptor %d\n", res);
         // 	continue;
         // }
-		// Service client and close
-        // doit(connfd);
+		// Service client
         doit(from_client);
         char *leave_msg = concat(from_client->username, " has left");
         send_msg_all(leave_msg, from_client);
@@ -464,7 +458,8 @@ void doit(client_struct *from_client)
                 // If after parsing the JOIN command, there are not 3 tokens (including JOIN) something has gone wrong..
                 if (i != 4) // +1 from how the while() loop above works
                 {
-                    send_msg_to("JOIN requires 2 arguments: JOIN {ROOMNAME} {USERNAME}\n", from_connfd);
+                    send_msg_to("ERROR\n", from_connfd);
+                    break;
                 }
                 else
                 {
@@ -474,6 +469,12 @@ void doit(client_struct *from_client)
                 }
                 
             }
+            else // if the command isnt a valid JOIN, send ERROR to client and close the connection
+            {
+                send_msg_to("ERROR\n", from_connfd);
+                break;
+            }
+            
         }
         else // Once the client has joined a chatroom they will be able to send messages
         {
