@@ -358,35 +358,49 @@ void send_msg_self(int connfd, char *msg)
     }
 }
 
+char* concat(const char *s1, const char *s2)
+{
+    char *result = malloc(strlen(s1) + strlen(s2) + 1); // +1 for the null-terminator
+    // in real code you would check for errors in malloc here
+    strcpy(result, s1);
+    strcat(result, s2);
+    return result;
+}
+
+
 void send_msg_all(char *msg, client_struct *from_client)
 {
     int connfd; // Holds the client fd's for each client;
+    int from_id = from_client->identifier;
 
     pthread_mutex_lock(&client_list_mutex);
     for (int i = 0; i < MAX_CLIENTS; ++i)
     {
-        if (client_list[i] != NULL) // Looking for a non-NULL slots
+        if ((client_list[i] != NULL) && (client_list[i]->identifier != from_id)) // Looking for a non-NULL slots, don't send to the client that sent it, 
         {
             connfd = client_list[i]->clientfd;
 
             // This will need to be changed when we actually have string usernames instead of just using the identifier
-            int username_length = snprintf(NULL, 0, "%d", from_client->identifier);
+            int username_length = snprintf(NULL, 0, "%d", from_id);
             char* username = malloc(username_length + 1);
-            snprintf(username, username_length + 1, "%d", from_client->identifier);
+            snprintf(username, username_length + 1, "%d", from_id);
 
-            // Write indicator of which user sent the message
-            if (write(connfd, username, strlen(username)) < 0) 
+            char* prompt = concat(username, ": ");
+
+            // Write indicator of which user sent the message {USERNAME}: 
+            if (write(connfd, prompt, strlen(prompt)) < 0) 
             {
                 printf("Write message to all failed\n");
                 exit(EXIT_FAILURE);
             }
-            // Write the desired message
+            // Write the message sent from the user from_client
             if (write(connfd, msg, strlen(msg)) < 0) 
             {
                 printf("Write message to all failed\n");
                 exit(EXIT_FAILURE);
             }
             free(username);
+            free(prompt);
         }
     }
     pthread_mutex_unlock(&client_list_mutex);
@@ -406,16 +420,18 @@ void doit(client_struct *from_client)
     //char *welcome_message = "[Server] Welcome to the chatroom, client. Please join a chatroom using the command: JOIN {ROOMNAME} {USERNAME}\n"; 
     //send(connfd, welcome_message, strlen(welcome_message) , 0 ); // Send a welcome message to the client
 
-    printf("HELLO FROM: %d\n", connfd);
+    printf("Client \"%d\" joined the server\n", from_client->identifier);
     // Continously read messages from the client
-    while ((valread = read(connfd , buffer, MAX_LINE_LENGTH)) > 0)
+    char *prompt = ":";
+    send(connfd, prompt, strlen(prompt), 0);
+    while ((valread = read(connfd, buffer, MAX_LINE_LENGTH)) > 0)
     {
         // printf("[Server] valread value: %d\n", valread);
 
 
-        printf("[Client] %s\n", buffer); // Print the client message on the server side
-        send_msg_self(connfd, buffer);
-        // send_msg_all(buffer, from_client);
+        printf("[Server] Client \"%d\" said: %s\n", from_client->identifier, buffer); // Print the client message on the server side
+        // send_msg_self(connfd, buffer);
+        send_msg_all(buffer, from_client);
 
         // 1. Read the messages from the client continously [x]
         // 2. Print the client's entered message to the client themself []
