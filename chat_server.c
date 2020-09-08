@@ -4,7 +4,7 @@
 #include <stdlib.h> 
 #include <netinet/in.h> 
 #include <string.h>
-
+#include <ctype.h>
 #include <signal.h>
 #include <pthread.h>
 #include <stdatomic.h>
@@ -437,6 +437,11 @@ void doit(client_struct *from_client)
             if (p == NULL) // Ignore blank input, or else a segfault will occur in the strcmp() below
             {
                 continue;
+            }
+
+            for (int k = 0; k < strlen(p); ++k) // Case insensitivity for keyword JOIN
+            {
+                p[k] = toupper(p[k]);
             }
 
             if (!strcmp(p, "JOIN")) // We only care to parse the line if its a JOIN command at this point
