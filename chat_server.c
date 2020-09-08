@@ -435,9 +435,6 @@ void doit(client_struct *from_client)
     int from_joined = from_client->joined;
     char msg_buffer[MAX_LINE_LENGTH] = {0}; // Holds a client message
 
-    //char *welcome_message = "[Server] Welcome to the chatroom, client. Please join a chatroom using the command: JOIN {ROOMNAME} {USERNAME}\n"; 
-    //send(connfd, welcome_message, strlen(welcome_message) , 0 ); // Send a welcome message to the client
-
     printf("[Server] Client \"%d\" joined the server\n", from_id);
     // Continously read messages from the client
     while ((valread = read(from_connfd, msg_buffer, MAX_LINE_LENGTH)) > 0)
