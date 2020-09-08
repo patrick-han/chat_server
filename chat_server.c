@@ -109,6 +109,7 @@ void client_remove(client_struct *client)
         {
             if(client_list[i]->identifier == client->identifier)
             {
+                free(client);
                 client_list[i] = NULL;
             }
         }
@@ -478,21 +479,14 @@ void doit(client_struct *from_client)
         {
             printf("[Server] In room: \"%s\", client \"%d\" said: \"%s\"\n", from_client->roomname, from_id, msg_buffer); // Print the client message on the server side
 
-
-            // 1. Construct the USERNAME: prompt
-            // This will need to be changed when we actually have string usernames instead of just using the identifier
-            // int username_length = snprintf(NULL, 0, "%d", from_id);
-            // char* username = malloc(username_length + 1);
-            // snprintf(username, username_length + 1, "%d", from_id);
+            // Append username and prompt to the message
             char* username = from_client->username;
             char* prompt = concat(username, ": ");
             char* complete_msg = concat(prompt, msg_buffer);
 
             // Send prompted message back to self and to all other clients in the same chat room
-            // send_msg_all(msg_buffer, prompt, from_client);
             send_msg_all(complete_msg, from_client);
 
-            // free(username);
             free(prompt);
             free(complete_msg);
         }
