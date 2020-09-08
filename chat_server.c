@@ -14,6 +14,8 @@
 #define MAX_CLIENTS 100
 #define MAX_LINE_LENGTH 20000 // 20k bytes including the \n
 #define DEFAULT_PORT 1234
+#define MAX_NAME_LENGTH 64
+#define MAX_ROOMNAME_LENGTH 64
 
 // For the pre-threading
 #define SBUFSIZE 16
@@ -28,6 +30,7 @@ typedef struct
     int clientfd;   // File descriptor for the client's connection
     int identifier; // Client identifier
     int joined;     // Boolean that says whether a client has joined a room 1 if yes 0 if no
+    char roomname[MAX_ROOMNAME_LENGTH]; // The chat room a client is part of
     // TODO: Add attribute which says which chat room the client is a part of
 } client_struct;
 
@@ -99,29 +102,6 @@ void client_add(client_struct *client)
 // {
 
 // }
-
-
-/*
- * Requires:
- *   Client struct pointer.
- *
- * Effects:
- *   Adds a client the the client_list.
- */
-void client_list_print(void)
-{
-    printf("[Server] Total number of clients: %u\n", num_clients);
-    // pthread_mutex_lock(&client_list_mutex);
-    // for (int i = 0; i < MAX_CLIENTS; ++i)
-    // {
-    //     if (!client_list[i]) // Looking for a non-NULL slot
-    //     {
-    //         // printf("Client found: %u\n", client_list[i]->identifier);
-    //         printf("Client found:\n");
-    //     }
-    // }
-    // pthread_mutex_unlock(&client_list_mutex);
-}
 
 
 /*
@@ -433,6 +413,15 @@ void doit(client_struct *from_client)
                     printf("%i. token = %s\n", i, p);
                     p = strtok(NULL, " ");
                     i = i + 1;
+
+                    if (i == 2) // ROOMNAME
+                    {
+                        strcpy(from_client->roomname, p);
+                    }
+                    else if (i == 3) // USERNAME
+                    {
+
+                    }
                 }
                 // If after parsing the JOIN command, there are not 3 tokens (including JOIN) something has gone wrong..
                 if (i != 4) // +1 from how the while() loop above works
@@ -442,7 +431,7 @@ void doit(client_struct *from_client)
                 else
                 {
                     //TODO: validate roomname and username are not spaces or something wacky...
-
+                    printf("Client identified by: %d has joined the room %s\n", from_id, from_client->roomname);
                     from_joined = 1;
                 }
                 
@@ -450,7 +439,7 @@ void doit(client_struct *from_client)
         }
         else // Once the client has joined a chatroom they will be able to send messages
         {
-            printf("[Server] Client \"%d\" said: %s\n", from_id, msg_buffer); // Print the client message on the server side
+            printf("[Server] In room: \"%s\", client \"%d\" said: %s\n", from_client->roomname, from_id, msg_buffer); // Print the client message on the server side
 
 
             // 1. Construct the USERNAME: prompt
