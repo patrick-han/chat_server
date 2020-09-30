@@ -119,6 +119,7 @@ void client_remove(client_struct *client)
             {
                 free(client);
                 client_list[i] = NULL;
+                num_clients--;
             }
         }
         
