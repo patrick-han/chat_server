@@ -251,6 +251,10 @@ int main(int argc, char **argv)
     else 
     {
         port = atoi(argv[1]);
+        if (port <= 1023 || port > 65535) {
+            printf("error: specify port number greater than 1023\n");
+            exit(1);
+        }
         printf("Started server on port: %u\n", port);
     }
 
