@@ -281,7 +281,12 @@ int main(int argc, char **argv)
     }
 
     // Forcefully attaching socket to the port
-    if (setsockopt(serverfd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt))) 
+    if (setsockopt(serverfd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt))) 
+    { 
+        printf("setsockopt error\n");
+        exit(EXIT_FAILURE); 
+    } 
+    if (setsockopt(serverfd, SOL_SOCKET, SO_REUSEPORT, &opt, sizeof(opt))) 
     { 
         printf("setsockopt error\n");
         exit(EXIT_FAILURE); 
