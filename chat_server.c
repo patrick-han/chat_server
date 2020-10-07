@@ -240,7 +240,7 @@ int main(int argc, char **argv)
     {
         printf("error: server requires a single argument for the desired port number\n");
         printf("usage: ./chat_server [port]\n"); 
-        exit(1);
+        exit(EXIT_FAILURE);
     }
     unsigned int port;
     if (argc == 1) // If no port number is specified
@@ -253,7 +253,7 @@ int main(int argc, char **argv)
         port = atoi(argv[1]);
         if (port <= 1023 || port > 65535) {
             printf("error: specify port number greater than 1023\n");
-            exit(1);
+            exit(EXIT_FAILURE);
         }
         printf("Started server on port: %u\n", port);
     }
