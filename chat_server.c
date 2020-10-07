@@ -19,7 +19,7 @@
 
 // For the pre-threading
 #define SBUFSIZE 16
-#define NTHREADS 4		// Number of worker threads
+#define NTHREADS 4		// Number of worker threads by default
 
 
 // Typedefs
@@ -348,6 +348,10 @@ int main(int argc, char **argv)
         client->joined = 0;
         client_add(client);
 
+        if (num_clients > NTHREADS) // If the number of clients is exceeding the default amount of worker threads
+        {
+            pthread_create(&tid, NULL, thread, NULL);
+        }
         // Handle the client by inserting the connfd into the bounded buffer (Done by the main thread)
         sbuf_insert(&sbuf, client);
     }
