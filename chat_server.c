@@ -342,7 +342,7 @@ int main(int argc, char **argv)
         }
 
         // Initialize a client struct + attributes, and add it to the list of clients
-        client_struct *client = malloc(sizeof(client_struct));
+        client_struct *client = calloc(1, sizeof(client_struct));
         client->clientfd = connfd;
         client->identifier = next_identifier++;
         client->joined = 0;
