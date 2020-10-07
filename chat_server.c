@@ -274,7 +274,7 @@ int main(int argc, char **argv)
     int opt = 1;
 
     // Create socket file descriptor for the server
-    if ((serverfd = socket(AF_INET, SOCK_STREAM, 0)) == 0) // IPv4, TCP, protocol value 0
+    if ((serverfd = socket(AF_INET, SOCK_STREAM, 0)) == -1) // IPv4, TCP, protocol value 0
     {
         printf("socket creation failed\n");
         exit(EXIT_FAILURE);
