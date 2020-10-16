@@ -465,13 +465,14 @@ void doit(client_struct *from_client)
     // Continously read messages from the client
     while ((valread = read(from_connfd, msg_buffer, MAX_LINE_LENGTH)) > 0)
     {
-        strip_CR_NL(msg_buffer); // Strip return carriage and new line
+        strip_CR_NL(msg_buffer); // Strip return carriage and new line from terminal entered message
+        msg_buffer[MAX_LINE_LENGTH - 1] = '\0';
         
         if (!from_joined)
         {
-            // strcpy the message buffer since strtok() modifies the msg_buffer
+            // strncpy the message buffer since strtok() modifies the msg_buffer
             char msg_buffer_cpy[MAX_LINE_LENGTH] = {0};
-            strcpy(msg_buffer_cpy, msg_buffer);
+            strncpy(msg_buffer_cpy, msg_buffer, MAX_LINE_LENGTH);
 
             // Delimit the input string use strtok() to look for JOIN {ROOMNAME} {USERNAME}<NL>
             int i = 1;
@@ -512,7 +513,6 @@ void doit(client_struct *from_client)
                 }
                 else
                 {
-                    //TODO: validate roomname and username are not spaces or something wacky...
                     printf("[Server] Client identified by: \"%d\" and named: \"%s\" has joined the room called: \"%s\"\n", from_id, from_client->username, from_client->roomname);
                     char* joined_message = concat(from_client->username, " has joined");
                     send_msg_all(joined_message, from_client);
