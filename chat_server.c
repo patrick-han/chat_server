@@ -495,11 +495,13 @@ void doit(client_struct *from_client)
 
                     if (i == 2) // ROOMNAME
                     {
-                        strcpy(from_client->roomname, p);
+                        strncpy(from_client->roomname, p, MAX_ROOMNAME_LENGTH);
+                        from_client->roomname[MAX_ROOMNAME_LENGTH - 1] = '\0';
                     }
                     else if (i == 3) // USERNAME
                     {
-                        strcpy(from_client->username, p);
+                        strncpy(from_client->username, p, MAX_NAME_LENGTH);
+                        from_client->roomname[MAX_NAME_LENGTH - 1] = '\0';
                     }
                 }
                 // If after parsing the JOIN command, there are not 3 tokens (including JOIN) something has gone wrong..
